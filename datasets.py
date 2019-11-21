@@ -7,13 +7,18 @@ import youtokentome as yttm
 import random
 import pickle
 import nltk
+import numpy as np
 from nltk import tokenize
 
 
+PAD_IDX = 0
+
+
 class GutenbergDataset(Dataset):
-    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regenerate=True, seed=1234):
+    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regenerate=True, seed=1234, max_len=40):
         """Dataset of over 3000 english books"""
         super().__init__()
+        self.max_len = max_len
 
         if regenerate:
             # HERE WE REGENERATE BPE AND ALL DATA
@@ -39,9 +44,13 @@ class GutenbergDataset(Dataset):
             print('Splitting sentences')
             sentences = tokenize.sent_tokenize(books_stripped)
 
+
+
             # converting all sentences to BPE
             print('Converting sentences to BPE')
             # sentences = [self.bpe.encode(sentence, output_type=yttm.OutputType.SUBWORD, bos=True, eos=True) for sentence in tqdm(sentences)]
+            print('Average sentence length: %s' % np.mean([len(sentence.split()) for sentence in sentences]))
+            print('Average sentence std: %s' % np.std([len(sentence.split()) for sentence in sentences]))
 
             # create list of sentence pairs
             print('Creating sentence pairs')
@@ -68,20 +77,29 @@ class GutenbergDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def tokenize(self, s):
+    def format_example(self, next_example):
         """We use NLTK tokenizer"""
-        result = ' '.join(nltk.word_tokenize(s))
-        return result
+        # tokenize to split punctuation
+        next_example = [' '.join(nltk.word_tokenize(sentence)) for sentence in next_example]
+        # BPE encode
+        next_example = [self.bpe.encode(sentence, output_type=yttm.OutputType.ID, bos=True, eos=True) for sentence in
+                        next_example]
+        # clip to max length
+        next_example = [sentence[:self.max_len] for sentence in next_example]
+        # pad to max length
+        next_example = [sentence + [PAD_IDX] * (self.max_len - len(sentence)) for sentence in next_example]
+        # convert to numpy array
+        next_example = [np.array(sentence) for sentence in next_example]
+        return next_example
 
     def __getitem__(self, idx):
         next_example = self.examples[idx]
-        next_example = [self.tokenize(sentence) for sentence in next_example]
-        next_example = [self.bpe.encode(sentence, output_type=yttm.OutputType.SUBWORD, bos=True, eos=True) for sentence in next_example]
+        next_example = self.format_example(next_example)
         return next_example
 
 
 if __name__ == '__main__':
-    regenerate = False
+    regenerate = True
     gutenberg_path = 'data/Gutenberg/txt/Zane Grey___Betty Zane.txt'
     #gutenberg_path = 'data/Gutenberg/txt/all.txt'
     bpe_path = 'data/bpe.model'
@@ -89,5 +107,4 @@ if __name__ == '__main__':
     ds = GutenbergDataset(gutenberg_path=gutenberg_path, bpe_path=bpe_path, tmp_path=tmp_path, regenerate=regenerate)
 
     print('Length of dataset: %s' % len(ds))
-
     print('Example #0: %s' % str(ds[1000]))
