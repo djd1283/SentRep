@@ -15,7 +15,7 @@ PAD_IDX = 0
 
 
 class GutenbergDataset(Dataset):
-    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regen_data=True, regen_bpe=True, seed=1234, max_len=40):
+    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regen_data=True, regen_bpe=True, d_vocab=10000, seed=1234, max_len=40):
         """Dataset of over 3000 english books"""
         super().__init__()
         self.max_len = max_len
@@ -26,7 +26,7 @@ class GutenbergDataset(Dataset):
 
             # BPE for sentences
             if regen_bpe:
-                yttm.BPE.train(data=gutenberg_path, vocab_size=10000, model=bpe_path)
+                yttm.BPE.train(data=gutenberg_path, vocab_size=d_vocab, model=bpe_path)
 
             # Loading model
             self.bpe = yttm.BPE(model=bpe_path)
@@ -78,25 +78,25 @@ class GutenbergDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def format_example(self, next_example):
-        """We use NLTK tokenizer"""
-        # tokenize to split punctuation
-        next_example = [' '.join(nltk.word_tokenize(sentence)) for sentence in next_example]
-        # BPE encode
-        next_example = [self.bpe.encode(sentence, output_type=yttm.OutputType.ID, bos=True, eos=True) for sentence in
-                        next_example]
-        # clip to max length
-        next_example = [sentence[:self.max_len] for sentence in next_example]
-        # pad to max length
-        next_example = [sentence + [PAD_IDX] * (self.max_len - len(sentence)) for sentence in next_example]
-        # convert to numpy array
-        next_example = [np.array(sentence) for sentence in next_example]
-        return next_example
-
     def __getitem__(self, idx):
         next_example = self.examples[idx]
-        next_example = self.format_example(next_example)
+        next_example = [format_sentence(sentence, self.bpe, self.max_len) for sentence in next_example]
         return next_example
+
+
+def format_sentence(sentence, bpe, max_len):
+    """We use NLTK tokenizer"""
+    # tokenize to split punctuation
+    sentence = ' '.join(nltk.word_tokenize(sentence))
+    # BPE encode
+    sentence = bpe.encode(sentence, output_type=yttm.OutputType.ID, bos=True, eos=True)
+    # clip to max length
+    sentence = sentence[:max_len]
+    # pad to max length
+    sentence = sentence + [PAD_IDX] * (max_len - len(sentence))
+    # convert to numpy array
+    sentence = np.array(sentence)
+    return sentence
 
 
 if __name__ == '__main__':

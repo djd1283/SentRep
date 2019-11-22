@@ -111,7 +111,7 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=3
 
 if __name__ == '__main__':
     ###### PARAMETERS ##############
-    regenerate = True
+    regenerate = False
     train_path = 'data/Gutenberg/train_small.txt'
     val_path = 'data/Gutenberg/val_small.txt'
     # gutenberg_path = 'data/Gutenberg/txt/all.txt'
@@ -120,17 +120,16 @@ if __name__ == '__main__':
     val_tmp_path = 'data/Gutenberg/val_small_processed.pkl'
     model_path = 'data/grureader.ckpt'
     d_hidden = 300
-    n_epoch = 1
-    restore = True
+    n_epoch = 10
+    restore = False
+    d_vocab = 10000
     ################################
 
     train_ds = GutenbergDataset(gutenberg_path=train_path, bpe_path=bpe_path, tmp_path=train_tmp_path, regen_data=regenerate,
-                          regen_bpe=regenerate)
+                          regen_bpe=regenerate, d_vocab=d_vocab)
 
     val_ds = GutenbergDataset(gutenberg_path=val_path, bpe_path=bpe_path, tmp_path=val_tmp_path, regen_data=regenerate,
-                                regen_bpe=False)
-
-    d_vocab = train_ds.bpe.vocab_size()
+                                regen_bpe=False, d_vocab=d_vocab)
 
     print('Length of train dataset: %s' % len(train_ds))
     print('Length of val dataset: %s' % len(val_ds))
