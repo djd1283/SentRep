@@ -10,8 +10,14 @@ class GRUReader(nn.Module):
         super().__init__()
         self.emb = nn.Embedding(d_vocab, d_hidden)
         self.gru = nn.GRU(d_hidden, d_hidden, batch_first=True)
+        self.first_lin = nn.Linear(d_hidden, d_hidden * 2)
+        self.second_lin = nn.Linear(d_hidden * 2, d_hidden)
 
     def forward(self, x):
         x_emb = self.emb(x)
-        states, output = self.gru(x_emb)
+        states, last = self.gru(x_emb)
+        last = last.squeeze(0)
+
+        output = self.second_lin(torch.relu(self.first_lin(last)))
+
         return output

@@ -15,17 +15,18 @@ PAD_IDX = 0
 
 
 class GutenbergDataset(Dataset):
-    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regenerate=True, seed=1234, max_len=40):
+    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regen_data=True, regen_bpe=True, seed=1234, max_len=40):
         """Dataset of over 3000 english books"""
         super().__init__()
         self.max_len = max_len
 
-        if regenerate:
+        if regen_data:
             # HERE WE REGENERATE BPE AND ALL DATA
             assert gutenberg_path is not None
 
             # BPE for sentences
-            yttm.BPE.train(data=gutenberg_path, vocab_size=10000, model=bpe_path)
+            if regen_bpe:
+                yttm.BPE.train(data=gutenberg_path, vocab_size=10000, model=bpe_path)
 
             # Loading model
             self.bpe = yttm.BPE(model=bpe_path)
@@ -104,7 +105,8 @@ if __name__ == '__main__':
     #gutenberg_path = 'data/Gutenberg/txt/all.txt'
     bpe_path = 'data/bpe.model'
     tmp_path = 'data/Gutenberg/processed.pkl'
-    ds = GutenbergDataset(gutenberg_path=gutenberg_path, bpe_path=bpe_path, tmp_path=tmp_path, regenerate=regenerate)
+    ds = GutenbergDataset(gutenberg_path=gutenberg_path, bpe_path=bpe_path, tmp_path=tmp_path, regen_bpe=regenerate,
+                          regen_data=regenerate)
 
     print('Length of dataset: %s' % len(ds))
     print('Example #0: %s' % str(ds[1000]))
