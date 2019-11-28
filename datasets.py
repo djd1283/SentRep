@@ -1,6 +1,7 @@
 """Create dataset of (anchor, pos, neg) examples for training sentence representations from triplet loss. Format SNLI
 dataset for fine-tuning."""
 from torch.utils.data import Dataset
+from transformers import BertTokenizer, BertModel
 import os
 from tqdm import tqdm
 import youtokentome as yttm
@@ -10,15 +11,20 @@ import nltk
 import numpy as np
 from nltk import tokenize
 
-
 PAD_IDX = 0
 
 
 class GutenbergDataset(Dataset):
-    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regen_data=True, regen_bpe=True, d_vocab=10000, seed=1234, max_len=40):
+    def __init__(self, gutenberg_path=None, bpe_path=None, tmp_path=None, regen_data=True, regen_bpe=True,
+                 d_vocab=10000, seed=1234, max_len=40, bert=True):
         """Dataset of over 3000 english books"""
         super().__init__()
         self.max_len = max_len
+        self.bert = bert
+
+        if bert:
+            pretrained_weights = 'bert-base-uncased'
+            self.wordpiece = BertTokenizer.from_pretrained(pretrained_weights)
 
         if regen_data:
             # HERE WE REGENERATE BPE AND ALL DATA
@@ -44,8 +50,6 @@ class GutenbergDataset(Dataset):
 
             print('Splitting sentences')
             sentences = tokenize.sent_tokenize(books_stripped)
-
-
 
             # converting all sentences to BPE
             print('Converting sentences to BPE')
@@ -75,12 +79,27 @@ class GutenbergDataset(Dataset):
             # Loading model
             self.bpe = yttm.BPE(model=bpe_path)
 
+    def format_sentence_with_bert(self, sentence):
+        """Convert sentence to BERT sentence ids using wordpiece."""
+
+        wordpiece_enc = self.wordpiece.encode(sentence, add_special_tokens=True, max_length=self.max_len)
+
+        # pad to max length
+        wordpiece_enc = wordpiece_enc + [0] * (self.max_len - len(wordpiece_enc))
+
+        indices = np.array(wordpiece_enc)
+
+        return indices
+
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, idx):
         next_example = self.examples[idx]
-        next_example = [format_sentence(sentence, self.bpe, self.max_len) for sentence in next_example]
+        if self.bert:
+            next_example = [self.format_sentence_with_bert(sentence) for sentence in next_example]
+        else:
+            next_example = [format_sentence(sentence, self.bpe, self.max_len) for sentence in next_example]
         return next_example
 
 
@@ -110,3 +129,7 @@ if __name__ == '__main__':
 
     print('Length of dataset: %s' % len(ds))
     print('Example #0: %s' % str(ds[1000]))
+
+
+
+
