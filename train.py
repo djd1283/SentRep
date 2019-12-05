@@ -7,9 +7,12 @@ from models import GRUReader
 from tqdm import tqdm
 import wandb
 from transformers import BertModel
+from config import *
+from config import batch_size
 
 wandb.init(project='sent_repr')
 device = torch.device('cuda:2')
+
 
 def triplet_loss(anchor_emb, pos_emb, neg_emb):
     # triplet loss = max(||sa-sp|| - ||sa-sn|| + e, 0) for e = 1
@@ -28,7 +31,8 @@ def triplet_loss(anchor_emb, pos_emb, neg_emb):
     return max_loss.mean()
 
 
-def calc_val_loss(model, val_ds, batch_size=32, bert_model=None):
+def calc_val_loss(model, val_ds, bert_model=None):
+
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     losses = []
     for batch in tqdm(val_dl):
@@ -38,9 +42,9 @@ def calc_val_loss(model, val_ds, batch_size=32, bert_model=None):
             model.eval()
             anchor_s, pos_s, neg_s = batch
 
-            batch_size, s_len = anchor_s.shape
+            local_batch_size, s_len = anchor_s.shape
             all_s = torch.stack([anchor_s, pos_s, neg_s], 0)
-            all_s = all_s.view(batch_size * 3, s_len)
+            all_s = all_s.view(local_batch_size * 3, s_len)
 
             all_emb = calculate_model_outputs(model, all_s, bert_model=bert_model)
 
@@ -71,8 +75,7 @@ def calculate_model_outputs(model, all_s, bert_model=None):
     return all_emb
 
 
-def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=16, calc_val_loss_every_n=None,
-          restore=False, bert=False):
+def train(model, train_ds, val_ds):
     print('Training')
 
     model.to(device)
@@ -82,7 +85,9 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=1
 
     if calc_val_loss_every_n is None:
         # calculate validation loss at the end of every epoch
-        calc_val_loss_every_n = len(train_dl)
+        val_loss_every_n = len(train_dl)
+    else:
+        val_loss_every_n = calc_val_loss_every_n
 
     lowest_loss = float('inf')
     start_epoch = 0
@@ -114,9 +119,9 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=1
             batch = [d.to(device) for d in batch]
             anchor_s, pos_s, neg_s = batch
 
-            batch_size, s_len = anchor_s.shape
+            local_batch_size, s_len = anchor_s.shape
             all_s = torch.stack([anchor_s, pos_s, neg_s], 0)
-            all_s = all_s.view(batch_size * 3, s_len)
+            all_s = all_s.view(local_batch_size * 3, s_len)
 
             model.train()
 
@@ -138,8 +143,8 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=1
 
             wandb.log({'train_loss': loss.item()})
 
-            if batch_idx % calc_val_loss_every_n == calc_val_loss_every_n - 1:
-                val_loss = calc_val_loss(model, val_ds, batch_size=batch_size, bert_model=bert_model)
+            if batch_idx % val_loss_every_n == val_loss_every_n - 1:
+                val_loss = calc_val_loss(model, val_ds, bert_model=bert_model)
                 bar.write('Calculated validation loss: %s' % val_loss.item())
                 wandb.log({'val_loss': val_loss.item()})
 
@@ -160,42 +165,14 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=1
 
 if __name__ == '__main__':
     ###### PARAMETERS ##############
-    regenerate = True
-    small = True
 
-    d_hidden = 768
-    n_epoch = 10
-    restore = False
-    d_vocab = 10000
-    bert = False
-    if bert:
-        print('Using BERT encodings')
-        d_vocab = 30000
-
-    if small:
-        train_path = 'data/Gutenberg/train_small.txt'
-        val_path = 'data/Gutenberg/val_small.txt'
-        bpe_path = 'data/bpe_small.model'
-        train_tmp_path = 'data/Gutenberg/train_small_processed.pkl'
-        val_tmp_path = 'data/Gutenberg/val_small_processed.pkl'
-        model_path = 'data/smallgrureader.ckpt'
-    else:
-        train_path = 'data/Gutenberg/train.txt'
-        val_path = 'data/Gutenberg/val.txt'
-        bpe_path = 'data/bpe.model'
-        train_tmp_path = 'data/Gutenberg/train_processed.pkl'
-        val_tmp_path = 'data/Gutenberg/val_processed.pkl'
-        model_path = 'data/grureader.ckpt'
-
-    if bert:
-        model_path = model_path + '.bert'
     ################################
 
     train_ds = GutenbergDataset(gutenberg_path=train_path, bpe_path=bpe_path, tmp_path=train_tmp_path, regen_data=regenerate,
-                                regen_bpe=regenerate, d_vocab=d_vocab, bert=bert)
+                                regen_bpe=regenerate, d_vocab=d_vocab, bert=bert, max_len=max_len)
 
     val_ds = GutenbergDataset(gutenberg_path=val_path, bpe_path=bpe_path, tmp_path=val_tmp_path, regen_data=regenerate,
-                                regen_bpe=False, d_vocab=d_vocab, bert=bert)
+                                regen_bpe=False, d_vocab=d_vocab, bert=bert, max_len=max_len)
 
     if bert:
         d_vocab = len(train_ds.wordpiece.ids_to_tokens)
@@ -210,7 +187,7 @@ if __name__ == '__main__':
     else:
         model = GRUReader(d_hidden=d_hidden, d_vocab=d_vocab)
 
-    train(model, train_ds, val_ds, model_path, n_epoch=n_epoch, restore=restore, bert=bert)
+    train(model, train_ds, val_ds)
 
 
 

@@ -8,29 +8,11 @@ from datasets import format_sentence, format_sentence_with_bert
 from train import calculate_model_outputs
 from transformers import BertModel, BertTokenizer
 import os
-
-PATH_TO_SENTEVAL = '/home/ddonahue/SentEval/data'
+from config import *
 
 params_senteval = {'task_path': PATH_TO_SENTEVAL, 'usepytorch': True, 'kfold': 10, 'batch_size': 64,
                    'classifier': {'nhid': 0, 'optim': 'adam', 'batch_size': 64, 'tenacity': 5, 'epoch_size': 4}}
-small = True
-if small:
-    model_path = 'data/smallgrureader.ckpt'
-else:
-    model_path = 'data/grureader.ckpt'
-bpe_path = 'data/bpe.model'
-d_hidden = 768
-d_vocab = 10000
-max_len = 40
-bert = True
 
-if bert:
-    model_path = model_path + '.bert'
-
-bert_max = False
-bert_mean = True
-
-if bert_max: assert bert
 
 def prepare(params, samples):
     # TODO here we load the trained sentence representation model
@@ -71,16 +53,19 @@ def batcher(params, batch):
     # send to gpu
     bpe_batch_indices = bpe_batch_indices.to(params['device'])
     if bert_max:
+        # we use max over BERT embeddings as sentence representation
         with torch.no_grad():
             all_embs, _ = params['bert'](bpe_batch_indices)[-2:]
             all_embs, _ = torch.max(all_embs, 1)  # get maximum value along the time dimension 1
             all_embs = all_embs.cpu().detach().numpy()
     elif bert_mean:
+        # we use mean over BERT embeddings as sentence representation
         with torch.no_grad():
             all_embs, _ = params['bert'](bpe_batch_indices)[-2:]
             all_embs = torch.mean(all_embs, 1)  # get maximum value along the time dimension 1
             all_embs = all_embs.cpu().detach().numpy()
     else:
+        # we use model to calculate embeddings
         all_embs = calculate_model_outputs(params['model'], bpe_batch_indices, bert_model=params['bert'])
         all_embs = all_embs.cpu().detach().numpy()
 
