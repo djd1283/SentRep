@@ -79,28 +79,29 @@ class GutenbergDataset(Dataset):
             # Loading model
             self.bpe = yttm.BPE(model=bpe_path)
 
-    def format_sentence_with_bert(self, sentence):
-        """Convert sentence to BERT sentence ids using wordpiece."""
-
-        wordpiece_enc = self.wordpiece.encode(sentence, add_special_tokens=True, max_length=self.max_len)
-
-        # pad to max length
-        wordpiece_enc = wordpiece_enc + [0] * (self.max_len - len(wordpiece_enc))
-
-        indices = np.array(wordpiece_enc)
-
-        return indices
-
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, idx):
         next_example = self.examples[idx]
         if self.bert:
-            next_example = [self.format_sentence_with_bert(sentence) for sentence in next_example]
+            next_example = [format_sentence_with_bert(sentence, self.wordpiece, self.max_len) for sentence in next_example]
         else:
             next_example = [format_sentence(sentence, self.bpe, self.max_len) for sentence in next_example]
         return next_example
+
+
+def format_sentence_with_bert(sentence, wordpiece, max_len):
+    """Convert sentence to BERT sentence ids using wordpiece."""
+
+    wordpiece_enc = wordpiece.encode(sentence, add_special_tokens=True, max_length=max_len)
+
+    # pad to max length
+    wordpiece_enc = wordpiece_enc + [0] * (max_len - len(wordpiece_enc))
+
+    indices = np.array(wordpiece_enc)
+
+    return indices
 
 
 def format_sentence(sentence, bpe, max_len):

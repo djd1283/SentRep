@@ -1,5 +1,6 @@
 """Train model (such as LSTM, Transformer, BERT) on triplet loss and Stanford Natural Language Inference (SNLI)."""
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from datasets import GutenbergDataset
 from models import GRUReader
@@ -8,7 +9,7 @@ import wandb
 from transformers import BertModel
 
 wandb.init(project='sent_repr')
-
+device = torch.device('cuda:2')
 
 def triplet_loss(anchor_emb, pos_emb, neg_emb):
     # triplet loss = max(||sa-sp|| - ||sa-sn|| + e, 0) for e = 1
@@ -27,18 +28,28 @@ def triplet_loss(anchor_emb, pos_emb, neg_emb):
     return max_loss.mean()
 
 
-def calc_val_loss(model, val_ds, batch_size=32):
+def calc_val_loss(model, val_ds, batch_size=32, bert_model=None):
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     losses = []
     for batch in tqdm(val_dl):
 
         with torch.no_grad():
+            batch = [d.to(device) for d in batch]
+            model.eval()
             anchor_s, pos_s, neg_s = batch
 
-            # compute sentence representations for anchor, positive, and negative sentences
-            anchor_emb = model(anchor_s)
-            pos_emb = model(pos_s)
-            neg_emb = model(neg_s)
+            batch_size, s_len = anchor_s.shape
+            all_s = torch.stack([anchor_s, pos_s, neg_s], 0)
+            all_s = all_s.view(batch_size * 3, s_len)
+
+            all_emb = calculate_model_outputs(model, all_s, bert_model=bert_model)
+
+            emb_size = all_emb.shape[-1]
+
+            all_emb = all_emb.view(3, anchor_s.shape[0], emb_size)
+            anchor_emb = all_emb[0]
+            pos_emb = all_emb[1]
+            neg_emb = all_emb[2]
 
             loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
             losses.append(loss)
@@ -46,9 +57,25 @@ def calc_val_loss(model, val_ds, batch_size=32):
     return torch.mean(torch.stack(losses, 0))
 
 
-def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=32, calc_val_loss_every_n=None,
+def calculate_model_outputs(model, all_s, bert_model=None):
+    # here we take wordpiece indices and convert them to embeddings with BERT
+    if bert_model is not None:
+        with torch.no_grad():
+            all_bert_emb, _ = bert_model(all_s)[-2:]
+            all_s = all_bert_emb  # we represent sentences using BERT embeddings
+    # then we change model to take embeddings as input
+
+    # compute sentence representations for anchor, positive, and negative sentences
+    all_emb = model(all_s)
+
+    return all_emb
+
+
+def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=16, calc_val_loss_every_n=None,
           restore=False, bert=False):
     print('Training')
+
+    model.to(device)
 
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -64,6 +91,8 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=3
     if bert:
         pretrained_weights = 'bert-base-uncased'
         bert_model = BertModel.from_pretrained(pretrained_weights)
+        bert_model.to(device)
+        # bert_model = nn.DataParallel(bert_model)
 
     if restore:
         print('Loading model from save')
@@ -75,27 +104,27 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=3
         print('Lowest loss: %s' % lowest_loss)
         print('Current epoch: %s' % start_epoch)
 
-    print('Evaluating on validation set before training')
-    val_loss = calc_val_loss(model, val_ds, batch_size=batch_size)
-    wandb.log({'val_loss': val_loss.item()})
+    #print('Evaluating on validation set before training')
+    #val_loss = calc_val_loss(model, val_ds, batch_size=batch_size, bert_model=bert_model)
+    #wandb.log({'val_loss': val_loss.item()})
 
     for epoch_idx in range(start_epoch, n_epoch):
         bar = tqdm(train_dl)
         for batch_idx, batch in enumerate(bar):
+            batch = [d.to(device) for d in batch]
             anchor_s, pos_s, neg_s = batch
 
             batch_size, s_len = anchor_s.shape
             all_s = torch.stack([anchor_s, pos_s, neg_s], 0)
             all_s = all_s.view(batch_size * 3, s_len)
 
-            # TODO here we convert sentences to BERT representations and hand into attention model if bert=True
+            model.train()
 
-            # compute sentence representations for anchor, positive, and negative sentences
-            all_emb = model(all_s)
+            all_emb = calculate_model_outputs(model, all_s, bert_model=bert_model)
 
             emb_size = all_emb.shape[-1]
 
-            all_emb = all_emb.view(3, batch_size, emb_size)
+            all_emb = all_emb.view(3, anchor_s.shape[0], emb_size)
             anchor_emb = all_emb[0]
             pos_emb = all_emb[1]
             neg_emb = all_emb[2]
@@ -110,7 +139,7 @@ def train(model, train_ds, val_ds, model_path, n_epoch=1, lr=0.001, batch_size=3
             wandb.log({'train_loss': loss.item()})
 
             if batch_idx % calc_val_loss_every_n == calc_val_loss_every_n - 1:
-                val_loss = calc_val_loss(model, val_ds, batch_size=batch_size)
+                val_loss = calc_val_loss(model, val_ds, batch_size=batch_size, bert_model=bert_model)
                 bar.write('Calculated validation loss: %s' % val_loss.item())
                 wandb.log({'val_loss': val_loss.item()})
 
@@ -134,6 +163,15 @@ if __name__ == '__main__':
     regenerate = True
     small = True
 
+    d_hidden = 768
+    n_epoch = 10
+    restore = False
+    d_vocab = 10000
+    bert = False
+    if bert:
+        print('Using BERT encodings')
+        d_vocab = 30000
+
     if small:
         train_path = 'data/Gutenberg/train_small.txt'
         val_path = 'data/Gutenberg/val_small.txt'
@@ -149,20 +187,15 @@ if __name__ == '__main__':
         val_tmp_path = 'data/Gutenberg/val_processed.pkl'
         model_path = 'data/grureader.ckpt'
 
-    d_hidden = 300
-    n_epoch = 10
-    restore = False
-    d_vocab = 10000
-    bert = True
     if bert:
-        d_vocab = 30000
+        model_path = model_path + '.bert'
     ################################
 
     train_ds = GutenbergDataset(gutenberg_path=train_path, bpe_path=bpe_path, tmp_path=train_tmp_path, regen_data=regenerate,
-                                regen_bpe=regenerate, d_vocab=d_vocab, bert=True)
+                                regen_bpe=regenerate, d_vocab=d_vocab, bert=bert)
 
     val_ds = GutenbergDataset(gutenberg_path=val_path, bpe_path=bpe_path, tmp_path=val_tmp_path, regen_data=regenerate,
-                                regen_bpe=False, d_vocab=d_vocab, bert=True)
+                                regen_bpe=False, d_vocab=d_vocab, bert=bert)
 
     if bert:
         d_vocab = len(train_ds.wordpiece.ids_to_tokens)
@@ -172,7 +205,10 @@ if __name__ == '__main__':
     print('Length of val dataset: %s' % len(val_ds))
     print('Example #0: %s' % str(train_ds[1000]))
 
-    model = GRUReader(d_hidden=d_hidden, d_vocab=d_vocab)
+    if bert:
+        model = GRUReader(d_hidden=d_hidden, d_in=768)
+    else:
+        model = GRUReader(d_hidden=d_hidden, d_vocab=d_vocab)
 
     train(model, train_ds, val_ds, model_path, n_epoch=n_epoch, restore=restore, bert=bert)
 
