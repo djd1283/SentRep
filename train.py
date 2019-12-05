@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from datasets import GutenbergDataset
-from models import GRUReader
+from models import *
 from tqdm import tqdm
 import wandb
 from transformers import BertModel
@@ -31,7 +31,7 @@ def triplet_loss(anchor_emb, pos_emb, neg_emb):
     return max_loss.mean()
 
 
-def calc_val_loss(model, val_ds, bert_model=None):
+def calc_val_loss(model, val_ds):
 
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     losses = []
@@ -46,7 +46,7 @@ def calc_val_loss(model, val_ds, bert_model=None):
             all_s = torch.stack([anchor_s, pos_s, neg_s], 0)
             all_s = all_s.view(local_batch_size * 3, s_len)
 
-            all_emb = calculate_model_outputs(model, all_s, bert_model=bert_model)
+            all_emb = calculate_model_outputs(model, all_s)
 
             emb_size = all_emb.shape[-1]
 
@@ -61,15 +61,11 @@ def calc_val_loss(model, val_ds, bert_model=None):
     return torch.mean(torch.stack(losses, 0))
 
 
-def calculate_model_outputs(model, all_s, bert_model=None):
+def calculate_model_outputs(model, all_s):
     # here we take wordpiece indices and convert them to embeddings with BERT
-    if bert_model is not None:
-        with torch.no_grad():
-            all_bert_emb, _ = bert_model(all_s)[-2:]
-            all_s = all_bert_emb  # we represent sentences using BERT embeddings
+
     # then we change model to take embeddings as input
 
-    # compute sentence representations for anchor, positive, and negative sentences
     all_emb = model(all_s)
 
     return all_emb
@@ -92,13 +88,6 @@ def train(model, train_ds, val_ds):
     lowest_loss = float('inf')
     start_epoch = 0
 
-    bert_model = None
-    if bert:
-        pretrained_weights = 'bert-base-uncased'
-        bert_model = BertModel.from_pretrained(pretrained_weights)
-        bert_model.to(device)
-        # bert_model = nn.DataParallel(bert_model)
-
     if restore:
         print('Loading model from save')
         save_details = torch.load(model_path)
@@ -110,7 +99,7 @@ def train(model, train_ds, val_ds):
         print('Current epoch: %s' % start_epoch)
 
     #print('Evaluating on validation set before training')
-    #val_loss = calc_val_loss(model, val_ds, batch_size=batch_size, bert_model=bert_model)
+    #val_loss = calc_val_loss(model, val_ds, batch_size=batch_size)
     #wandb.log({'val_loss': val_loss.item()})
 
     for epoch_idx in range(start_epoch, n_epoch):
@@ -125,7 +114,7 @@ def train(model, train_ds, val_ds):
 
             model.train()
 
-            all_emb = calculate_model_outputs(model, all_s, bert_model=bert_model)
+            all_emb = calculate_model_outputs(model, all_s)
 
             emb_size = all_emb.shape[-1]
 
@@ -144,7 +133,7 @@ def train(model, train_ds, val_ds):
             wandb.log({'train_loss': loss.item()})
 
             if batch_idx % val_loss_every_n == val_loss_every_n - 1:
-                val_loss = calc_val_loss(model, val_ds, bert_model=bert_model)
+                val_loss = calc_val_loss(model, val_ds)
                 bar.write('Calculated validation loss: %s' % val_loss.item())
                 wandb.log({'val_loss': val_loss.item()})
 
@@ -182,10 +171,16 @@ if __name__ == '__main__':
     print('Length of val dataset: %s' % len(val_ds))
     print('Example #0: %s' % str(train_ds[1000]))
 
-    if bert:
-        model = GRUReader(d_hidden=d_hidden, d_in=768)
+    if model_name == 'grureader':
+        model = GRUReader(d_hidden, d_vocab=d_vocab)
+    elif model_name == 'bertgrureader':
+        model = BERTGRUReader(d_hidden, train_bert=train_bert)
     else:
-        model = GRUReader(d_hidden=d_hidden, d_vocab=d_vocab)
+        raise ValueError('No model name %s' % model_name)
+
+    parameters = [p for p in model.parameters() if p.requires_grad]
+    n_parameters = sum(p.numel() for p in parameters)
+    print('Number of parameters: %s' % n_parameters)
 
     train(model, train_ds, val_ds)
 

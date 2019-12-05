@@ -10,7 +10,7 @@ from transformers import BertModel, BertTokenizer
 import os
 from config import *
 
-params_senteval = {'task_path': PATH_TO_SENTEVAL, 'usepytorch': True, 'kfold': 10, 'batch_size': 64,
+params_senteval = {'task_path': path_to_senteval, 'usepytorch': True, 'kfold': 10, 'batch_size': 64,
                    'classifier': {'nhid': 0, 'optim': 'adam', 'batch_size': 64, 'tenacity': 5, 'epoch_size': 4}}
 
 
@@ -66,7 +66,7 @@ def batcher(params, batch):
             all_embs = all_embs.cpu().detach().numpy()
     else:
         # we use model to calculate embeddings
-        all_embs = calculate_model_outputs(params['model'], bpe_batch_indices, bert_model=params['bert'])
+        all_embs = calculate_model_outputs(params['model'], bpe_batch_indices)
         all_embs = all_embs.cpu().detach().numpy()
 
     return all_embs
@@ -75,7 +75,7 @@ def batcher(params, batch):
 logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
 se = senteval.engine.SE(params_senteval, batcher, prepare)
-transfer_tasks = ['SST2']
+transfer_tasks = ['STS2016']
 
 # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
 #                   'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
