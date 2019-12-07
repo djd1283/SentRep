@@ -22,6 +22,8 @@ class GutenbergDataset(Dataset):
         self.max_len = max_len
         self.bert = bert
 
+        example_path = os.path.join(tmp_path, 'examples.pkl')
+
         if bert:
             pretrained_weights = 'bert-base-uncased'
             self.wordpiece = BertTokenizer.from_pretrained(pretrained_weights)
@@ -30,12 +32,7 @@ class GutenbergDataset(Dataset):
             # HERE WE REGENERATE BPE AND ALL DATA
             assert gutenberg_path is not None
 
-            # BPE for sentences
-            if regen_bpe:
-                yttm.BPE.train(data=gutenberg_path, vocab_size=d_vocab, model=bpe_path)
-
-            # Loading model
-            self.bpe = yttm.BPE(model=bpe_path)
+            # TODO found bug, where BPE is not being trained on tokenized sentences
 
             print('Vocab size: %s' % self.bpe.vocab_size())
 
@@ -69,12 +66,19 @@ class GutenbergDataset(Dataset):
             print('Creating triplet examples (anchor, positive, negative)')
             self.examples = [(sentence_pairs[i][0], sentence_pairs[i][1], sentence_pairs[i + 1][1]) for i in range(len(sentence_pairs) - 1)]
 
-            pickle.dump(self.examples, open(tmp_path, 'wb'))
+            pickle.dump(self.examples, open(example_path, 'wb'))
+
+            # Loading BPE model
+            self.bpe = yttm.BPE(model=bpe_path)
+
+            # BPE for sentences
+            if regen_bpe:
+                yttm.BPE.train(data=gutenberg_path, vocab_size=d_vocab, model=bpe_path)
 
         else:
             print('Loading examples from tmp file')
             # OTHERWISE WE LOAD DATA FROM SAVE
-            self.examples = pickle.load(open(tmp_path, 'rb'))
+            self.examples = pickle.load(open(example_path, 'rb'))
 
             # Loading model
             self.bpe = yttm.BPE(model=bpe_path)
@@ -119,17 +123,71 @@ def format_sentence(sentence, bpe, max_len):
     return sentence
 
 
-if __name__ == '__main__':
-    regenerate = True
-    gutenberg_path = 'data/Gutenberg/txt/Zane Grey___Betty Zane.txt'
-    #gutenberg_path = 'data/Gutenberg/txt/all.txt'
-    bpe_path = 'data/bpe.model'
-    tmp_path = 'data/Gutenberg/processed.pkl'
-    ds = GutenbergDataset(gutenberg_path=gutenberg_path, bpe_path=bpe_path, tmp_path=tmp_path, regen_bpe=regenerate,
-                          regen_data=regenerate)
+class SNLIDataset(Dataset):
+    def __init__(self, snli_path, tmp_path, regenerate=True, max_len=40):
+        super().__init__()
+        self.max_len = max_len
 
-    print('Length of dataset: %s' % len(ds))
-    print('Example #0: %s' % str(ds[1000]))
+        if not os.path.exists(tmp_path):
+            os.makedirs(tmp_path)
+
+        examples_path = os.path.join(tmp_path, 'examples.pkl')
+
+        pretrained_weights = 'bert-base-uncased'
+        self.wordpiece = BertTokenizer.from_pretrained(pretrained_weights)
+
+        if regenerate:
+            print('Regenerating SNLI formatted features')
+            self.snli_path = snli_path
+
+            data = open(self.snli_path, 'r').read()
+            lines = data.split('\n')[1:]  # first line is just header
+            features = [line.split('\t') for line in lines]
+            # premise, hypothesis, label for each example
+            # import pdb; pdb.set_trace()
+            self.examples = [(feature[5], feature[6], feature[0]) for feature in features if len(feature) > 6]
+
+            if not os.path.exists(tmp_path):
+                os.makedirs(tmp_path)
+
+            pickle.dump(self.examples, open(examples_path, 'wb'))
+        else:
+            print('Loading formatted SNLI from tmp path')
+            self.examples = pickle.load(open(examples_path, 'rb'))
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, idx):
+        premise = format_sentence_with_bert(self.examples[idx][0], self.wordpiece, self.max_len)
+        hypothesis = format_sentence_with_bert(self.examples[idx][1], self.wordpiece, self.max_len)
+        label = self.examples[idx][2]
+        label = 0 if label == 'neutral' else 1 if label == 'entailment' else 2  # if label == 'contradiction'
+
+        return premise, hypothesis, label
+
+
+if __name__ == '__main__':
+    # regenerate = True
+    # gutenberg_path = 'data/Gutenberg/txt/Zane Grey___Betty Zane.txt'
+    # #gutenberg_path = 'data/Gutenberg/txt/all.txt'
+    # bpe_path = 'data/bpe.model'
+    # tmp_path = 'data/Gutenberg/processed.pkl'
+    # ds = GutenbergDataset(gutenberg_path=gutenberg_path, bpe_path=bpe_path, tmp_path=tmp_path, regen_bpe=regenerate,
+    #                       regen_data=regenerate)
+    #
+    # print('Length of dataset: %s' % len(ds))
+    # print('Example #0: %s' % str(ds[1000]))
+
+    snli_train_path = 'data/snli_1.0/snli_1.0_train.txt'
+    snli_tmp_path = 'data/snli_tmp'
+    ds = SNLIDataset(snli_train_path, snli_tmp_path, regenerate=True)
+    print(len(ds))
+    example = ds[0]
+    print('Premise: %s' % str(example[0]))
+    print('Hypothesis: %s' % str(example[1]))
+    print('Label: %s' % example[2])
+
 
 
 
