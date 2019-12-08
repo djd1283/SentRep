@@ -5,34 +5,31 @@ import torch
 from models import GRUReader
 import youtokentome as yttm
 from datasets import format_sentence, format_sentence_with_bert
-from train import calculate_model_outputs, select_model
+from utils import select_model, calculate_model_outputs
 from transformers import BertModel, BertTokenizer
 import os
+import wandb
 from config import *
-
-params_senteval = {'task_path': path_to_senteval, 'usepytorch': True, 'kfold': 10, 'batch_size': batch_size,
-                   'classifier': {'nhid': 0, 'optim': 'adam', 'batch_size': batch_size, 'tenacity': 5, 'epoch_size': 4}}
 
 
 def prepare(params, samples):
     # TODO here we load the trained sentence representation model
-    model = select_model(model_name)
-    save_details = torch.load(model_path)
+    model = select_model(opt.model_name)
+    save_details = torch.load(opt.model_path)
     print('Loading model from save')
     model.load_state_dict(save_details['state_dict'])
-    bpe = yttm.BPE(model=bpe_path)
+    bpe = yttm.BPE(model=opt.bpe_path)
     params['device'] = torch.device('cuda:0')
     params['model'] = model
     params['model'].to(params['device'])  # send model to GPU
     params['bpe'] = bpe
     # params['bert'] = None
-    if bert:
-        params['wordpiece'] = BertTokenizer.from_pretrained(pretrained_weights)
+    if opt.bert:
+        params['wordpiece'] = BertTokenizer.from_pretrained(opt.pretrained_weights)
     #     pretrained_weights = 'bert-base-uncased'
     #     bert_model = BertModel.from_pretrained(pretrained_weights)
     #     params['bert'] = bert_model
     #     params['bert'].to(params['device'])  # send bert to GPU
-
 
 
 def batcher(params, batch):
@@ -40,10 +37,10 @@ def batcher(params, batch):
     bpe_batch_indices = []
     for sentence in batch:
         sentence = ' '.join(sentence)
-        if bert:
-            indices = format_sentence_with_bert(sentence, params['wordpiece'], max_len)
+        if opt.bert:
+            indices = format_sentence_with_bert(sentence, params['wordpiece'], opt.max_len)
         else:
-            indices = format_sentence(sentence, params['bpe'], max_len)
+            indices = format_sentence(sentence, params['bpe'], opt.max_len)
         bpe_batch_indices.append(torch.LongTensor(indices))
 
     bpe_batch_indices = torch.stack(bpe_batch_indices, 0)
@@ -71,25 +68,26 @@ def batcher(params, batch):
     return all_embs
 
 
-logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
+def evaluate():
+    wandb.init(project='sent_repr', config=opt)
 
-se = senteval.engine.SE(params_senteval, batcher, prepare)
-transfer_tasks = ['SST2']
+    logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
-# transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
-#                   'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
-#                   'SICKEntailment', 'SICKRelatedness', 'STSBenchmark',
-#                   'Length', 'WordContent', 'Depth', 'TopConstituents',
-#                   'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
-#                   'OddManOut', 'CoordinationInversion']
+    se = senteval.engine.SE(opt.params_senteval, batcher, prepare)
+    transfer_tasks = ['SST2']
 
-results = se.eval(transfer_tasks)
+    # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
+    #                   'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
+    #                   'SICKEntailment', 'SICKRelatedness', 'STSBenchmark',
+    #                   'Length', 'WordContent', 'Depth', 'TopConstituents',
+    #                   'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
+    #                   'OddManOut', 'CoordinationInversion']
 
-print(results)
+    results = se.eval(transfer_tasks)
+    print(results)
 
-# for key in results:
-#     print(key, results[key]['all'])
-#     print()
+    wandb.config.update({'eval': True})
 
-print('Hello world')
+if __name__ == '__main__':
+    evaluate()
 

@@ -22,6 +22,9 @@ class GutenbergDataset(Dataset):
         self.max_len = max_len
         self.bert = bert
 
+        if not os.path.exists(tmp_path):
+            os.makedirs(tmp_path)
+
         example_path = os.path.join(tmp_path, 'examples.pkl')
 
         if bert:
@@ -33,8 +36,6 @@ class GutenbergDataset(Dataset):
             assert gutenberg_path is not None
 
             # TODO found bug, where BPE is not being trained on tokenized sentences
-
-            print('Vocab size: %s' % self.bpe.vocab_size())
 
             # run through all lines in dataset
             print('Loading Gutenberg sentences')
