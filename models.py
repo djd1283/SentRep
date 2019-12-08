@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import BertModel
+from layers import MultiHeadAttention
 
 
 class SNLIClassifierFromModel(nn.Module):
@@ -82,3 +83,29 @@ class BERTMeanEmb(nn.Module):
         output = x_emb.mean(dim=1)  # take the mean embedding across the time dimension
 
         return output
+
+
+class BERTAttEmb(nn.Module):
+    def __init__(self, d_bert=768, n_head=8):
+        super().__init__()
+        self.d_bert = d_bert
+        pretrained_weights = 'bert-base-uncased'
+        self.bert_model = BertModel.from_pretrained(pretrained_weights)
+        self.att = MultiHeadAttention(n_head=n_head, d_out=d_bert, d_k=64, d_v=64)
+        self.query = nn.Parameter(torch.randn(1, 1, d_bert))
+
+    def forward(self, x):
+        x_emb = self.bert_model(x)[0]
+        batch_size = x_emb.shape[0]
+
+        # key should be learned parameter
+        query = self.query.repeat(batch_size, 1, 1)
+
+        output = self.att(q=query, k=x_emb, v=x_emb, mask=None)[0]
+
+        output = output.squeeze(1)
+
+        assert output.shape[-1] == self.d_bert
+
+        return output
+

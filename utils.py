@@ -1,5 +1,5 @@
 """Helper functions for train and evaluation"""
-from models import GRUReader, BERTGRUReader, BERTMeanEmb
+from models import GRUReader, BERTGRUReader, BERTMeanEmb, BERTAttEmb
 from config import *
 
 
@@ -10,6 +10,8 @@ def select_model(model_name):
         model = BERTGRUReader(opt.d_hidden, train_bert=opt.train_bert)
     elif model_name == 'bertmean':
         model = BERTMeanEmb()
+    elif model_name == 'bertattemb':
+        model = BERTAttEmb(opt.d_hidden, n_head=opt.n_head)
     else:
         raise ValueError('No model name %s' % model_name)
     return model
@@ -23,3 +25,5 @@ def calculate_model_outputs(model, all_s):
     all_emb = model(all_s)
 
     return all_emb
+
+

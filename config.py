@@ -4,12 +4,13 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--model_name', type=str, default='bertmean')
+parser.add_argument('--model_name', type=str, default='bertattemb')
 parser.add_argument('--regenerate', action='store_true', default=True)
 parser.add_argument('--small', action='store_true', default=False)
 parser.add_argument('--lr', type=float, default=0.00002)
 parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--d_hidden', type=int, default=768)
+parser.add_argument('--n_head', type=int, default=8)
 parser.add_argument('--n_epoch', type=int, default=1)
 parser.add_argument('--restore', action='store_true', default=False)
 parser.add_argument('--d_vocab', type=int, default=10000)
