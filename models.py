@@ -92,7 +92,7 @@ class BERTAttEmb(nn.Module):
         pretrained_weights = 'bert-base-uncased'
         self.bert_model = BertModel.from_pretrained(pretrained_weights)
         self.att = MultiHeadAttention(n_head=n_head, d_out=d_bert, d_k=64, d_v=64)
-        self.query = nn.Parameter(torch.randn(1, 1, d_bert))
+        self.query = nn.Parameter(torch.randn(1, 1, d_bert), requires_grad=True)
 
     def forward(self, x):
         x_emb = self.bert_model(x)[0]

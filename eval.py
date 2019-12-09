@@ -69,24 +69,25 @@ def batcher(params, batch):
 
 
 def evaluate():
-    wandb.init(project='sent_repr', config=opt)
+    wandb.init(project='sent_repr', config=opt, allow_val_change=True)
 
     logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
     se = senteval.engine.SE(opt.params_senteval, batcher, prepare)
-    transfer_tasks = ['SST2']
+    # transfer_tasks = ['SST2']
 
-    # transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
-    #                   'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
-    #                   'SICKEntailment', 'SICKRelatedness', 'STSBenchmark',
-    #                   'Length', 'WordContent', 'Depth', 'TopConstituents',
-    #                   'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
-    #                   'OddManOut', 'CoordinationInversion']
+    transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
+                      'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
+                      'SICKEntailment', 'SICKRelatedness', 'STSBenchmark',
+                      'Length', 'WordContent', 'Depth', 'TopConstituents',
+                      'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
+                      'OddManOut', 'CoordinationInversion']
 
     results = se.eval(transfer_tasks)
     print(results)
 
     wandb.config.update({'eval': True})
+
 
 if __name__ == '__main__':
     evaluate()

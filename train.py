@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from datasets import GutenbergDataset, SNLIDataset
+from datasets import GutenbergDataset, SNLIDataset, WikiTextDataset
 from models import *
 from tqdm import tqdm
 import wandb
@@ -62,12 +62,31 @@ def calculate_loss(model, batch, ce):
         pos_emb = all_emb[1]
         neg_emb = all_emb[2]
         loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
-    else:
+    elif opt.data == 'snli':
         # TODO train on SNLI
         premise, hypothesis, label = batch
         all_pred = model(premise, hypothesis)
-
         loss = ce(all_pred, label)
+
+    elif opt.data == 'wikitext':
+        left_s, right_s, pos_s, neg_s = batch
+        local_batch_size, s_len = left_s.shape
+        all_s = torch.stack([left_s, right_s, pos_s, neg_s], 0)
+        all_s = all_s.view(local_batch_size * 4, s_len)
+        all_emb = calculate_model_outputs(model, all_s)
+        emb_size = all_emb.shape[-1]
+        all_emb = all_emb.view(4, left_s.shape[0], emb_size)
+        left_emb = all_emb[0]
+        right_emb = all_emb[1]
+        pos_emb = all_emb[2]
+        neg_emb = all_emb[3]
+
+        # TODO find better way to merge embeddings together
+        anchor_emb = left_emb + right_emb
+
+        loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
+    else:
+        raise ValueError('Wrong data specified: %s' % opt.data)
     return loss
 
 
@@ -143,18 +162,22 @@ def train(model, train_ds, val_ds):
 
 
 def main():
-    wandb.init(project='sent_repr', config=opt)
+    print('Training')
+    wandb.init(project='sent_repr', config=opt, allow_val_change=True)
+    wandb.config.update({'train': True})
 
     if opt.data == 'gutenberg':
         train_ds = GutenbergDataset(gutenberg_path=opt.train_path, bpe_path=opt.bpe_path, tmp_path=opt.train_tmp_path, regen_data=opt.regenerate,
                                     regen_bpe=opt.regenerate, d_vocab=opt.d_vocab, bert=opt.bert, max_len=opt.max_len)
-
         val_ds = GutenbergDataset(gutenberg_path=opt.val_path, bpe_path=opt.bpe_path, tmp_path=opt.val_tmp_path, regen_data=opt.regenerate,
                                     regen_bpe=False, d_vocab=opt.d_vocab, bert=opt.bert, max_len=opt.max_len)
     elif opt.data == 'snli':
         train_ds = SNLIDataset(snli_path=opt.snli_train_path, tmp_path=opt.snli_train_tmp_path, regenerate=opt.regenerate, max_len=opt.max_len)
-
         val_ds = SNLIDataset(snli_path=opt.snli_val_path, tmp_path=opt.snli_val_tmp_path, regenerate=opt.regenerate, max_len=opt.max_len)
+
+    elif opt.data == 'wikitext':
+        train_ds = WikiTextDataset(wiki_path=opt.wikitext_train_path, tmp_path=opt.wikitext_train_tmp, regenerate=opt.regenerate)
+        val_ds = WikiTextDataset(wiki_path=opt.wikitext_val_path, tmp_path=opt.wikitext_val_tmp, regenerate=opt.regenerate)
     else:
         raise ValueError('Wrong dataset selected')
 
