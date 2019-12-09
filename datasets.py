@@ -213,7 +213,7 @@ class WikiTextDataset(Dataset):
             for i in tqdm(range(len(sentences) - 2)):
                 rand_sent = random.choice(sentences)
                 # sentence1, sentence2, sentence3, rand sentence
-                examples.append((sentences[i], sentences[i+1], sentences[i+2], rand_sent))
+                examples.append((sentences[i] + ' [SEP] ' + sentences[i+2], sentences[i+1], rand_sent))
 
             print('Shuffling')
             random.seed(seed)
@@ -235,13 +235,15 @@ class WikiTextDataset(Dataset):
 
     def __getitem__(self, idx):
         next_example = self.examples[idx]
-        next_example = [format_sentence_with_bert(sentence, self.wordpiece, self.max_len) for sentence in next_example]
+        anchor = format_sentence_with_bert(next_example[0], self.wordpiece, self.max_len * 2)
+        pos = format_sentence_with_bert(next_example[1], self.wordpiece, self.max_len)
+        neg = format_sentence_with_bert(next_example[2], self.wordpiece, self.max_len)
 
-        return next_example
+        return anchor, pos, neg
 
 
 def main():
-    wiki_path = 'data/wikitext-103/wiki.train.tokens'
+    wiki_path = 'data/wikitext-2/wiki.train.tokens'
     wiki_tmp = 'data/wiki_tmp'
 
     ds = WikiTextDataset(wiki_path=wiki_path, tmp_path=wiki_tmp, regenerate=True)

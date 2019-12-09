@@ -62,6 +62,7 @@ def calculate_loss(model, batch, ce):
         pos_emb = all_emb[1]
         neg_emb = all_emb[2]
         loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
+
     elif opt.data == 'snli':
         # TODO train on SNLI
         premise, hypothesis, label = batch
@@ -69,20 +70,17 @@ def calculate_loss(model, batch, ce):
         loss = ce(all_pred, label)
 
     elif opt.data == 'wikitext':
-        left_s, right_s, pos_s, neg_s = batch
-        local_batch_size, s_len = left_s.shape
-        all_s = torch.stack([left_s, right_s, pos_s, neg_s], 0)
-        all_s = all_s.view(local_batch_size * 4, s_len)
+        anchor_s, pos_s, neg_s = batch
+        local_batch_size, s_len = pos_s.shape
+        all_s = torch.stack([pos_s, neg_s], 0)
+        all_s = all_s.view(local_batch_size * 2, s_len)
         all_emb = calculate_model_outputs(model, all_s)
         emb_size = all_emb.shape[-1]
-        all_emb = all_emb.view(4, left_s.shape[0], emb_size)
-        left_emb = all_emb[0]
-        right_emb = all_emb[1]
-        pos_emb = all_emb[2]
-        neg_emb = all_emb[3]
+        all_emb = all_emb.view(2, pos_s.shape[0], emb_size)
+        pos_emb = all_emb[0]
+        neg_emb = all_emb[1]
 
-        # TODO find better way to merge embeddings together
-        anchor_emb = left_emb + right_emb
+        anchor_emb = calculate_model_outputs(model, anchor_s)  # anchor s has double max length
 
         loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
     else:
