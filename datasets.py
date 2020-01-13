@@ -125,7 +125,7 @@ def format_sentence(sentence, bpe, max_len):
 
 
 class SNLIDataset(Dataset):
-    def __init__(self, snli_path, tmp_path, regenerate=True, max_len=40):
+    def __init__(self, snli_path, tmp_path, regenerate=True, max_len=40, multinli_path=None):
         super().__init__()
         self.max_len = max_len
 
@@ -143,6 +143,13 @@ class SNLIDataset(Dataset):
 
             data = open(self.snli_path, 'r').read()
             lines = data.split('\n')[1:]  # first line is just header
+
+            # if we choose to include mnli data, add it here
+            if multinli_path is not None:
+                m_data = open(multinli_path, 'r').read()
+                m_lines = m_data.split('\n')[1:]
+                lines.extend(m_lines)
+
             features = [line.split('\t') for line in lines]
             # premise, hypothesis, label for each example
             # import pdb; pdb.set_trace()
@@ -169,10 +176,11 @@ class SNLIDataset(Dataset):
 
 
 class WikiTextDataset(Dataset):
-    def __init__(self, wiki_path=None, tmp_path=None, regenerate=True, seed=1234, max_len=40):
+    def __init__(self, wiki_path=None, tmp_path=None, regenerate=True, seed=1234, max_len=40, include_right_context=True):
         """Dataset of over 3000 english books"""
         super().__init__()
         self.max_len = max_len
+        self.include_right_context = include_right_context
 
         if not os.path.exists(tmp_path):
             os.makedirs(tmp_path)
@@ -213,7 +221,11 @@ class WikiTextDataset(Dataset):
             for i in tqdm(range(len(sentences) - 2)):
                 rand_sent = random.choice(sentences)
                 # sentence1, sentence2, sentence3, rand sentence
-                examples.append((sentences[i] + ' [SEP] ' + sentences[i+2], sentences[i+1], rand_sent))
+                if include_right_context:
+                    examples.append((sentences[i] + ' [SEP] ' + sentences[i+2], sentences[i+1], rand_sent))
+                else:
+                    # only include left context as anchor
+                    examples.append((sentences[i], sentences[i+1], rand_sent))
 
             print('Shuffling')
             random.seed(seed)

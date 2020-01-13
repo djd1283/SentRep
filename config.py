@@ -5,7 +5,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--model_name', type=str, default='bertmean')
-parser.add_argument('--regenerate', action='store_true', default=True)
+parser.add_argument('--regenerate', action='store_true', default=False)
 parser.add_argument('--small', action='store_true', default=False)
 parser.add_argument('--lr', type=float, default=0.00002)
 parser.add_argument('--batch_size', type=int, default=16)
@@ -19,14 +19,18 @@ parser.add_argument('--train_bert', action='store_true', default=False)
 parser.add_argument('--calc_val_loss_every_n', default=None)
 parser.add_argument('--path_to_senteval', type=str, default='/home/ddonahue/SentEval/data')
 parser.add_argument('--pretrained_weights', type=str, default='bert-base-uncased')
-parser.add_argument('--data', type=str, default='wikitext')
+parser.add_argument('--data', type=str, default='gutenberg')
 parser.add_argument('--snli_train_path', type=str, default='data/snli_1.0/snli_1.0_train.txt')
 parser.add_argument('--snli_val_path', type=str, default='data/snli_1.0/snli_1.0_dev.txt')
+parser.add_argument('--use_mnli', action='store_true', default=False)
+parser.add_argument('--mnli_train_path', type=str, default='data/multinli_1.0/multinli_1.0_train.txt')
+parser.add_argument('--mnli_val_path', type=str, default='data/multinli_1.0/multinli_1.0_dev_matched.txt')
 parser.add_argument('--snli_train_tmp_path', type=str, default='data/snli_train_tmp')
 parser.add_argument('--snli_val_tmp_path', type=str, default='data/snli_dev_tmp')
 parser.add_argument('--bert_max', action='store_true', default=False)
-parser.add_argument('--bert_mean', action='store_true', default=False)
+parser.add_argument('--bert_mean', action='store_true', default=True)
 parser.add_argument('--model_path', type=str, default=None)
+parser.add_argument('--data_parallel', action='store_true', default=False)
 
 opt = parser.parse_args()
 
@@ -78,9 +82,9 @@ else:
 opt.wikitext_train_path = 'data/wikitext-2/wiki.train.tokens'
 opt.wikitext_val_path = 'data/wikitext-2/wiki.valid.tokens'
 opt.wikitext_test_path = 'data/wikitext-2/wiki.test.tokens'
-
 opt.wikitext_train_tmp = 'data/wiki_train_tmp'
 opt.wikitext_val_tmp = 'data/wiki_valid_tmp'
+opt.wikitext_use_right_context = False
 
 opt.params_senteval = {'task_path': opt.path_to_senteval, 'usepytorch': True, 'kfold': 10, 'batch_size': opt.batch_size,
                        'classifier': {'nhid': 0, 'optim': 'adam', 'batch_size': opt.batch_size, 'tenacity': 5, 'epoch_size': 4}}

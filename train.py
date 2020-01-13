@@ -170,12 +170,22 @@ def main():
         val_ds = GutenbergDataset(gutenberg_path=opt.val_path, bpe_path=opt.bpe_path, tmp_path=opt.val_tmp_path, regen_data=opt.regenerate,
                                     regen_bpe=False, d_vocab=opt.d_vocab, bert=opt.bert, max_len=opt.max_len)
     elif opt.data == 'snli':
-        train_ds = SNLIDataset(snli_path=opt.snli_train_path, tmp_path=opt.snli_train_tmp_path, regenerate=opt.regenerate, max_len=opt.max_len)
-        val_ds = SNLIDataset(snli_path=opt.snli_val_path, tmp_path=opt.snli_val_tmp_path, regenerate=opt.regenerate, max_len=opt.max_len)
+        mnli_train_path = None
+        mnli_val_path = None
+        if opt.use_mnli:
+            mnli_train_path = opt.mnli_train_path
+            mnli_val_path = opt.mnli_val_path
+
+        train_ds = SNLIDataset(snli_path=opt.snli_train_path, tmp_path=opt.snli_train_tmp_path, regenerate=opt.regenerate,
+                               max_len=opt.max_len, multinli_path=mnli_train_path)
+        val_ds = SNLIDataset(snli_path=opt.snli_val_path, tmp_path=opt.snli_val_tmp_path, regenerate=opt.regenerate,
+                             max_len=opt.max_len, multinli_path=mnli_val_path)
 
     elif opt.data == 'wikitext':
-        train_ds = WikiTextDataset(wiki_path=opt.wikitext_train_path, tmp_path=opt.wikitext_train_tmp, regenerate=opt.regenerate)
-        val_ds = WikiTextDataset(wiki_path=opt.wikitext_val_path, tmp_path=opt.wikitext_val_tmp, regenerate=opt.regenerate)
+        train_ds = WikiTextDataset(wiki_path=opt.wikitext_train_path, tmp_path=opt.wikitext_train_tmp, regenerate=opt.regenerate,
+                                   include_right_context=opt.wikitext_use_right_context)
+        val_ds = WikiTextDataset(wiki_path=opt.wikitext_val_path, tmp_path=opt.wikitext_val_tmp, regenerate=opt.regenerate,
+                                 include_right_context=opt.wikitext_use_right_context)
     else:
         raise ValueError('Wrong dataset selected')
 
@@ -184,6 +194,11 @@ def main():
         print('BERT vocab size:', opt.d_vocab)
 
     model = select_model(opt.model_name)
+
+    # here we attempt to make the model parallel across multiple GPUs
+    if opt.data_parallel:
+        print('Distributing across available GPUs')
+        model = nn.DataParallel(model)
 
     print('Length of train dataset: %s' % len(train_ds))
     print('Length of val dataset: %s' % len(val_ds))
