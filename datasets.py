@@ -146,6 +146,7 @@ class SNLIDataset(Dataset):
 
             # if we choose to include mnli data, add it here
             if multinli_path is not None:
+                print('Adding MNLI dataset')
                 m_data = open(multinli_path, 'r').read()
                 m_lines = m_data.split('\n')[1:]
                 lines.extend(m_lines)

@@ -31,6 +31,24 @@ def triplet_loss(anchor_emb, pos_emb, neg_emb):
     return max_loss.mean()
 
 
+def classification_loss(anchor_emb, pos_emb, neg_emb):
+    """Use dot product between pos/neg embedding and anchor embedding as a similarity score. Use difference in similarity
+    score between positive embedding and negative embedding to classify between them. Thus, the positive embedding should
+    have a higher similarity score than the negative embedding."""
+    ce = nn.BCEWithLogitsLoss()
+    batch_size, emb_size = anchor_emb.shape
+
+    pos_anchor_dot = torch.bmm(anchor_emb.view(batch_size, 1, emb_size), pos_emb.view(batch_size, emb_size, 1)).view(batch_size)
+    neg_anchor_dot = torch.bmm(anchor_emb.view(batch_size, 1, emb_size), neg_emb.view(batch_size, emb_size, 1)).view(batch_size)
+
+    pos_neg_diff = pos_anchor_dot - neg_anchor_dot
+    ones = torch.ones(batch_size).to(anchor_emb.device)
+
+    loss = ce(pos_neg_diff, ones)
+
+    return loss
+
+
 def calc_val_loss(model, val_ds):
 
     val_dl = DataLoader(val_ds, batch_size=opt.batch_size, shuffle=False)
@@ -61,7 +79,13 @@ def calculate_loss(model, batch, ce):
         anchor_emb = all_emb[0]
         pos_emb = all_emb[1]
         neg_emb = all_emb[2]
-        loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
+
+        if opt.loss_type == 'triplet':
+            loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
+        elif opt.loss_type == 'classify':
+            loss = classification_loss(anchor_emb, pos_emb, neg_emb)
+        else:
+            raise ValueError('Invalid loss type: %s' % str(opt.loss_type))
 
     elif opt.data == 'snli':
         # TODO train on SNLI
@@ -82,9 +106,15 @@ def calculate_loss(model, batch, ce):
 
         anchor_emb = calculate_model_outputs(model, anchor_s)  # anchor s has double max length
 
-        loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
+        if opt.loss_type == 'triplet':
+            loss = triplet_loss(anchor_emb, pos_emb, neg_emb)
+        elif opt.loss_type == 'classify':
+            loss = classification_loss(anchor_emb, pos_emb, neg_emb)
+        else:
+            raise ValueError('Invalid loss type: %s' % str(opt.loss_type))
     else:
         raise ValueError('Wrong data specified: %s' % opt.data)
+
     return loss
 
 
@@ -124,9 +154,21 @@ def train(model, train_ds, val_ds):
     #val_loss = calc_val_loss(model, val_ds)
     #wandb.log({'val_loss': val_loss.item()})
 
+    print('Using learning rate warm-up')
+    n_batches = len(train_dl)
+
     for epoch_idx in range(start_epoch, opt.n_epoch):
         bar = tqdm(train_dl)
         for batch_idx, batch in enumerate(bar):
+
+            # here we implement learning rate warmup over 10% of the training data
+            dynamic_learning_rate = opt.lr
+            ten_percent_of_data = int(n_batches * 0.1)
+            if epoch_idx == 0 and batch_idx < ten_percent_of_data:
+                dynamic_learning_rate = dynamic_learning_rate * (batch_idx / ten_percent_of_data)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = dynamic_learning_rate
+
             model.train()
             batch = [d.to(device) for d in batch]
 
