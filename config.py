@@ -28,7 +28,7 @@ parser.add_argument('--mnli_val_path', type=str, default='data/multinli_1.0/mult
 parser.add_argument('--snli_train_tmp_path', type=str, default='data/snli_train_tmp')
 parser.add_argument('--snli_val_tmp_path', type=str, default='data/snli_dev_tmp')
 parser.add_argument('--bert_max', action='store_true', default=False)
-parser.add_argument('--bert_mean', action='store_true', default=True)
+parser.add_argument('--bert_mean', action='store_true', default=False)
 parser.add_argument('--model_path', type=str, default=None)
 parser.add_argument('--data_parallel', action='store_true', default=False)
 parser.add_argument('--loss_type', type=str, default='classify')  # loss to use on Gutenberg/WikiText

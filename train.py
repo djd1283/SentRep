@@ -10,6 +10,7 @@ from transformers import BertModel
 from config import *
 from eval import evaluate
 from utils import select_model, calculate_model_outputs
+from tgalert import TelegramAlert
 
 device = torch.device('cuda:0')
 
@@ -138,7 +139,7 @@ def train(model, train_ds, val_ds):
 
     if opt.restore:
         print('Loading model from save')
-        save_details = torch.load(model_path)
+        save_details = torch.load(opt.model_path)
         model.load_state_dict(save_details['state_dict'])
         optimizer.load_state_dict(save_details['optimizer'])
         lowest_loss = save_details['best_loss']
@@ -179,7 +180,7 @@ def train(model, train_ds, val_ds):
             loss.backward()
             optimizer.step()
 
-            wandb.log({'train_loss': loss.item()})
+            wandb.log({'train_loss': loss.item(), 'learning_rate': dynamic_learning_rate})
 
             if batch_idx % val_loss_every_n == val_loss_every_n - 1:
                 val_loss = calc_val_loss(model, val_ds)
@@ -205,6 +206,8 @@ def main():
     print('Training')
     wandb.init(project='sent_repr', config=opt, allow_val_change=True)
     wandb.config.update({'train': True})
+
+    alert = TelegramAlert()
 
     if opt.data == 'gutenberg':
         train_ds = GutenbergDataset(gutenberg_path=opt.train_path, bpe_path=opt.bpe_path, tmp_path=opt.train_tmp_path, regen_data=opt.regenerate,
@@ -253,6 +256,7 @@ def main():
     train(model, train_ds, val_ds)
 
     # after we are done training, why not run evaluation?
+    alert.write('Training complete')
 
 
 if __name__ == '__main__':

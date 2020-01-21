@@ -10,6 +10,7 @@ from transformers import BertModel, BertTokenizer
 import os
 import wandb
 from config import *
+from tgalert import TelegramAlert
 
 
 def prepare(params, samples):
@@ -72,6 +73,7 @@ def batcher(params, batch):
 
 def evaluate():
     wandb.init(project='sent_repr', config=opt, allow_val_change=True)
+    alert = TelegramAlert()
 
     logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
@@ -96,7 +98,10 @@ def evaluate():
 
     wandb.config.update({'eval': True})
 
+    alert.write('Evaluation complete')
+
 
 if __name__ == '__main__':
+
     evaluate()
 

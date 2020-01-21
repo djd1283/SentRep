@@ -101,6 +101,8 @@ def format_sentence_with_bert(sentence, wordpiece, max_len):
 
     wordpiece_enc = wordpiece.encode(sentence, add_special_tokens=True, max_length=max_len)
 
+    # TODO there might be a problem with padding??
+
     # pad to max length
     wordpiece_enc = wordpiece_enc + [0] * (max_len - len(wordpiece_enc))
 
@@ -162,6 +164,7 @@ class SNLIDataset(Dataset):
             pickle.dump(self.examples, open(examples_path, 'wb'))
         else:
             print('Loading formatted SNLI from tmp path')
+
             self.examples = pickle.load(open(examples_path, 'rb'))
 
     def __len__(self):
