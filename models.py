@@ -79,13 +79,14 @@ class BERTMeanEmb(nn.Module):
         self.bert_model = BertModel.from_pretrained(pretrained_weights)
 
     def forward(self, x):
-        # x shape [batch_size, n_tokens]
-        x_emb = self.bert_model(x)[0]
+        pad_mask = (x != 0).float()
 
-        import pdb; pdb.set_trace()
+        # x shape [batch_size, n_tokens]
+        x_emb = self.bert_model(x, attention_mask=pad_mask)[0]
+
+        pad_mask = pad_mask.unsqueeze(2)
 
         # shape [batch_size, n_tokens, 1]
-        pad_mask = (x != 0).float().unsqueeze(2)
 
         output = (x_emb * pad_mask).sum(1) / pad_mask.sum(1)
 

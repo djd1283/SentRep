@@ -32,6 +32,7 @@ parser.add_argument('--bert_mean', action='store_true', default=False)
 parser.add_argument('--model_path', type=str, default=None)
 parser.add_argument('--data_parallel', action='store_true', default=False)
 parser.add_argument('--loss_type', type=str, default='classify')  # loss to use on Gutenberg/WikiText
+parser.add_argument('--no_restore_eval', action='store_true', default=False)
 
 opt = parser.parse_args()
 

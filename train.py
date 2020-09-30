@@ -122,9 +122,12 @@ def calculate_loss(model, batch, ce):
 def train(model, train_ds, val_ds):
     print('Training')
 
-    model.to(device)
+    if opt.data == 'snli':
+        print('Adding NLI classifier to model')
+        model = SNLIClassifierFromModel(model, opt.d_hidden)
 
-    train_dl = DataLoader(train_ds, batch_size=opt.batch_size, shuffle=True, num_workers=2)
+    model.to(device)
+    train_dl = DataLoader(train_ds, batch_size=opt.batch_size, shuffle=True, num_workers=0)
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr)
     ce = nn.CrossEntropyLoss()
 
@@ -146,10 +149,6 @@ def train(model, train_ds, val_ds):
         start_epoch = save_details['epoch']
         print('Lowest loss: %s' % lowest_loss)
         print('Current epoch: %s' % start_epoch)
-
-    if opt.data == 'snli':
-        model = SNLIClassifierFromModel(model, opt.d_hidden)
-        model.to(device)
 
     #print('Evaluating on validation set before training')
     #val_loss = calc_val_loss(model, val_ds)
@@ -178,14 +177,18 @@ def train(model, train_ds, val_ds):
             # backpropagate gradients
             optimizer.zero_grad()
             loss.backward()
+
+            norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
+
             optimizer.step()
 
-            wandb.log({'train_loss': loss.item(), 'learning_rate': dynamic_learning_rate})
+            wandb.log({'train loss': loss.item(), 'learning rate': dynamic_learning_rate,
+                       'grad norm': norm})
 
             if batch_idx % val_loss_every_n == val_loss_every_n - 1:
                 val_loss = calc_val_loss(model, val_ds)
                 bar.write('Calculated validation loss: %s' % val_loss.item())
-                wandb.log({'val_loss': val_loss.item()})
+                wandb.log({'validation loss': val_loss.item()})
 
                 # if this is the lowest validation loss we've seen, save model
                 if val_loss < lowest_loss:
@@ -195,7 +198,7 @@ def train(model, train_ds, val_ds):
                         'epoch': epoch_idx + 1,
                         'state_dict': model.state_dict() if opt.data != 'snli' else model.model.state_dict(),
                         'best_loss': lowest_loss,
-                        'optimizer' : optimizer.state_dict(),
+                        'optimizer': optimizer.state_dict(),
                     }
 
                     print('Saving model')
@@ -205,7 +208,7 @@ def train(model, train_ds, val_ds):
 def main():
     print('Training')
     wandb.init(project='sent_repr', config=opt, allow_val_change=True)
-    wandb.config.update({'train': True})
+    wandb.config.update({'mode': 'training'})
 
     alert = TelegramAlert()
 
